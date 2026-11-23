@@ -251,9 +251,6 @@ class FloatingBubbleService : Service() {
         cropBoxView?.visibility = if (showCrop) View.VISIBLE else View.GONE
     }
 
-    /**
-     * Membersihkan teks OCR agar lebih ringkas dan tidak penuh noise UI/file manager.
-     */
     private fun cleanOcrText(raw: String): String {
         val dateRegex = Regex("""^\d{1,2}/\d{1,2}/\d{2,4}(\s*\+.*)?$""")
         val sizeRegex = Regex("""^\d+(\.\d+)?\s*(kb|mb|gb|b)$""", RegexOption.IGNORE_CASE)
@@ -312,7 +309,6 @@ class FloatingBubbleService : Service() {
             y = (screenHeight * 0.28f).toInt().coerceAtLeast(80)
         }
 
-        // Kotak area untuk mode "Terjemah Sebagian"
         val cropW = (screenWidth * 0.86f).toInt().coerceAtLeast(260)
         val cropH = (screenHeight * 0.18f).toInt().coerceAtLeast(120)
         val cParams = WindowManager.LayoutParams(
@@ -371,7 +367,6 @@ class FloatingBubbleService : Service() {
             }
         }
 
-        // Panel hasil terjemahan yang rapi di bagian bawah layar
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(24, 18, 24, 18)
@@ -471,7 +466,8 @@ class FloatingBubbleService : Service() {
             textSize = 11f
             isAllCaps = false
             val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginHorizontal = 6
+                leftMargin = 6
+                rightMargin = 6
             }
             layoutParams = lp
         }
