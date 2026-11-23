@@ -19,8 +19,15 @@ import android.widget.TextView
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
+import com.google.mlkit.nl.translate.TranslatorOptions
 
 class FloatingBubbleService : Service() {
+
+    companion object {
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+    }
 
     private var windowManager: WindowManager? = null
     private var bubbleView: TextView? = null
@@ -31,9 +38,10 @@ class FloatingBubbleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        val options = com.google.mlkit.nl.translate.TranslatorOptions.Builder()
+        val options = TranslatorOptions.Builder()
             .setSourceLanguage(TranslateLanguage.JAPANESE)
             .setTargetLanguage(TranslateLanguage.INDONESIAN)
             .build()
@@ -73,29 +81,35 @@ class FloatingBubbleService : Service() {
             y = 180
         }
 
-        // Kotak hasil terjemahan melayang di atas layar
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 24, 28, 24)
+            setPadding(32, 26, 32, 26)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#E6111827"))
-                cornerRadius = 28f
+                setColor(Color.parseColor("#F2111827"))
+                cornerRadius = 32f
                 setStroke(3, Color.parseColor("#3B82F6"))
             }
             visibility = View.GONE
         }
 
+        val tvHeader = TextView(this).apply {
+            text = "QUICK TRANSLATE • JP → ID"
+            setTextColor(Color.parseColor("#93C5FD"))
+            textSize = 11f
+        }
+
         val tvSource = TextView(this).apply {
-            text = "Sumber: (ketuk 'Terjemahkan Clipboard')"
+            text = "Sumber: (ketuk bubble TL untuk terjemahkan clipboard)"
             setTextColor(Color.parseColor("#9CA3AF"))
             textSize = 12f
+            setPadding(0, 8, 0, 0)
         }
 
         val tvTranslated = TextView(this).apply {
             text = "Hasil terjemahan akan muncul di sini..."
             setTextColor(Color.WHITE)
-            textSize = 15f
-            setPadding(0, 12, 0, 16)
+            textSize = 16f
+            setPadding(0, 10, 0, 16)
         }
 
         val btnRow = LinearLayout(this).apply {
@@ -103,7 +117,7 @@ class FloatingBubbleService : Service() {
         }
 
         val btnTranslateClip = Button(this).apply {
-            text = "Clipboard -> ID"
+            text = "Translate"
             textSize = 12f
         }
 
@@ -112,17 +126,17 @@ class FloatingBubbleService : Service() {
             textSize = 12f
         }
 
-        val btnStopService = Button(this).apply {
-            text = "Tutup"
+        val btnTurnOff = Button(this).apply {
+            text = "OFF Bubble"
             textSize = 12f
         }
 
-        btnTranslateClip.setOnClickListener {
+        fun runClipboardTranslate() {
             val clipText = getClipboardText().orEmpty().trim()
             if (clipText.isEmpty()) {
                 tvSource.text = "Clipboard kosong"
-                tvTranslated.text = "Salin teks dulu lalu tekan tombol ini."
-                return@setOnClickListener
+                tvTranslated.text = "Salin teks Jepang terlebih dahulu lalu ketuk TL."
+                return
             }
             tvSource.text = "JP: $clipText"
             tvTranslated.text = "Menerjemahkan..."
@@ -131,27 +145,24 @@ class FloatingBubbleService : Service() {
                     tvTranslated.text = result
                 }
                 ?.addOnFailureListener { e ->
-                    tvTranslated.text = "Gagal: ${e.message} (pastikan model sudah diunduh)"
+                    tvTranslated.text = "Gagal: ${e.localizedMessage ?: "cek model JP & ID"}"
                 }
         }
 
-        btnHide.setOnClickListener {
-            panel.visibility = View.GONE
-        }
-
-        btnStopService.setOnClickListener {
-            stopSelf()
-        }
+        btnTranslateClip.setOnClickListener { runClipboardTranslate() }
+        btnHide.setOnClickListener { panel.visibility = View.GONE }
+        btnTurnOff.setOnClickListener { stopSelf() }
 
         btnRow.addView(btnTranslateClip)
         btnRow.addView(btnHide)
-        btnRow.addView(btnStopService)
+        btnRow.addView(btnTurnOff)
 
+        panel.addView(tvHeader)
         panel.addView(tvSource)
         panel.addView(tvTranslated)
         panel.addView(btnRow)
 
-        val panelWidth = (320 * resources.displayMetrics.density).toInt()
+        val panelWidth = (328 * resources.displayMetrics.density).toInt()
         val panelParams = WindowManager.LayoutParams(
             panelWidth,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -161,7 +172,7 @@ class FloatingBubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = 24
-            y = 260
+            y = 256
         }
 
         var initX = 0
@@ -191,10 +202,10 @@ class FloatingBubbleService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
-                        val showPanel = panel.visibility != View.VISIBLE
-                        panel.visibility = if (showPanel) View.VISIBLE else View.GONE
-                        if (showPanel) {
-                            btnTranslateClip.performClick()
+                        val willShow = panel.visibility != View.VISIBLE
+                        panel.visibility = if (willShow) View.VISIBLE else View.GONE
+                        if (willShow) {
+                            runClipboardTranslate()
                         }
                     }
                     true
@@ -217,6 +228,7 @@ class FloatingBubbleService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         translator?.close()
         bubbleView?.let { windowManager?.removeView(it) }
         panelView?.let { windowManager?.removeView(it) }
