@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1117"
+    android:background="#0B0F19"
     android:fillViewport="true">
 
     <LinearLayout
@@ -15,17 +15,17 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Bubble Translate"
-            android:textColor="#F9FAFB"
-            android:textSize="24sp"
+            android:text="✦ Anime Bubble TL"
+            android:textColor="#F8FAFC"
+            android:textSize="25sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Terjemah Offline Multi-Bahasa &amp; Floating Bubble"
-            android:textColor="#9CA3AF"
+            android:text="Floating Screen Translator • Manga &amp; VN Mode"
+            android:textColor="#94A3B8"
             android:textSize="13sp" />
 
         <!-- Card Mode & Bahasa -->
@@ -33,9 +33,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            app:cardBackgroundColor="#161B22"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="#2A3241"
+            app:cardBackgroundColor="#131A2A"
+            app:cardCornerRadius="20dp"
+            app:strokeColor="#2E3B55"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -47,8 +47,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Mode Terjemahan"
-                    android:textColor="#E5E7EB"
+                    android:text="Mode Pindai Layar"
+                    android:textColor="#E2E8F0"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -57,7 +57,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="46dp"
                     android:layout_marginTop="8dp"
-                    android:background="#1F2937"
+                    android:background="#1E293B"
                     android:padding="8dp" />
 
                 <LinearLayout
@@ -77,7 +77,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="Bahasa Asal"
-                            android:textColor="#9CA3AF"
+                            android:textColor="#94A3B8"
                             android:textSize="12sp" />
 
                         <Spinner
@@ -85,7 +85,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="44dp"
                             android:layout_marginTop="4dp"
-                            android:background="#1F2937" />
+                            android:background="#1E293B" />
                     </LinearLayout>
 
                     <TextView
@@ -93,8 +93,8 @@
                         android:layout_height="wrap_content"
                         android:paddingHorizontal="10dp"
                         android:paddingTop="14dp"
-                        android:text="⇄"
-                        android:textColor="#93C5FD"
+                        android:text="➔"
+                        android:textColor="#38BDF8"
                         android:textSize="18sp" />
 
                     <LinearLayout
@@ -107,7 +107,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="Bahasa Tujuan"
-                            android:textColor="#9CA3AF"
+                            android:textColor="#94A3B8"
                             android:textSize="12sp" />
 
                         <Spinner
@@ -115,7 +115,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="44dp"
                             android:layout_marginTop="4dp"
-                            android:background="#1F2937" />
+                            android:background="#1E293B" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -125,7 +125,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:text="Status model: Mengecek..."
-                    android:textColor="#93C5FD"
+                    android:textColor="#7DD3FC"
                     android:textSize="12sp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -135,8 +135,8 @@
                     android:layout_marginTop="10dp"
                     android:text="Unduh Paket Bahasa (Offline)"
                     android:textAllCaps="false"
-                    app:backgroundTint="#1D4ED8"
-                    app:cornerRadius="12dp" />
+                    app:backgroundTint="#0284C7"
+                    app:cornerRadius="14dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -145,9 +145,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            app:cardBackgroundColor="#161B22"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="#2A3241"
+            app:cardBackgroundColor="#131A2A"
+            app:cardCornerRadius="20dp"
+            app:strokeColor="#2E3B55"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -168,7 +168,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="Bubble Overlay: OFF"
-                        android:textColor="#E5E7EB"
+                        android:textColor="#E2E8F0"
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
@@ -177,7 +177,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="ON/OFF"
-                        android:textColor="#E5E7EB" />
+                        android:textColor="#E2E8F0" />
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
@@ -188,8 +188,8 @@
                     android:text="Mulai"
                     android:textAllCaps="false"
                     android:textSize="15sp"
-                    app:backgroundTint="#16A34A"
-                    app:cornerRadius="12dp" />
+                    app:backgroundTint="#EC4899"
+                    app:cornerRadius="14dp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnStopBubble"
@@ -198,8 +198,8 @@
                     android:layout_marginTop="8dp"
                     android:text="Matikan Bubble"
                     android:textAllCaps="false"
-                    app:backgroundTint="#DC2626"
-                    app:cornerRadius="12dp" />
+                    app:backgroundTint="#334155"
+                    app:cornerRadius="14dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
