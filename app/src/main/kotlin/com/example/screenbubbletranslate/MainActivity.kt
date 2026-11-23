@@ -5,6 +5,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.screenbubbletranslate.databinding.ActivityMainBinding
@@ -18,8 +21,25 @@ import com.google.mlkit.nl.translate.TranslatorOptions
 
 class MainActivity : AppCompatActivity() {
 
+    private data class LangOption(val label: String, val mlKitCode: String)
+
+    private val modes = listOf(
+        "Terjemah Layar Penuh",
+        "Terjemah Sebagian",
+        "Terjemah Otomatis",
+        "Terjemahan Real-time"
+    )
+
+    private val languages = listOf(
+        LangOption("Jepang (JP)", TranslateLanguage.JAPANESE),
+        LangOption("Inggris (EN)", TranslateLanguage.ENGLISH),
+        LangOption("Indonesia (ID)", TranslateLanguage.INDONESIAN),
+        LangOption("Korea (KO)", TranslateLanguage.KOREAN),
+        LangOption("Mandarin (ZH)", TranslateLanguage.CHINESE)
+    )
+
     private lateinit var binding: ActivityMainBinding
-    private lateinit var translator: Translator
+    private var translator: Translator? = null
     private val modelManager = RemoteModelManager.getInstance()
     private var isUpdatingSwitch = false
 
@@ -28,43 +48,122 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val options = TranslatorOptions.Builder()
-            .setSourceLanguage(TranslateLanguage.JAPANESE)
-            .setTargetLanguage(TranslateLanguage.INDONESIAN)
-            .build()
-        translator = Translation.getClient(options)
-
-        checkDownloadedModels()
-        syncFloatingUiState(FloatingBubbleService.isRunning)
+        setupSpinners()
+        rebuildTranslator()
+        checkSelectedModels()
+        syncFloatingUi(FloatingBubbleService.isRunning)
 
         binding.btnDownloadModel.setOnClickListener {
-            downloadModelsNow()
+            downloadSelectedModels()
         }
 
         binding.btnStartBubble.setOnClickListener {
-            enableFloatingBubble()
+            startBubbleWithCurrentSettings()
         }
 
         binding.btnStopBubble.setOnClickListener {
-            disableFloatingBubble()
+            stopBubbleService()
         }
 
         binding.switchFloating.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingSwitch) return@setOnCheckedChangeListener
             if (isChecked) {
-                enableFloatingBubble()
+                startBubbleWithCurrentSettings()
             } else {
-                disableFloatingBubble()
+                stopBubbleService()
             }
         }
     }
 
     override fun onResume() {
         super.onResume()
-        syncFloatingUiState(FloatingBubbleService.isRunning)
+        syncFloatingUi(FloatingBubbleService.isRunning)
     }
 
-    private fun enableFloatingBubble() {
+    private fun setupSpinners() {
+        val modeAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, modes)
+        binding.spinnerMode.adapter = modeAdapter
+
+        val langLabels = languages.map { it.label }
+        val srcAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, langLabels)
+        val dstAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, langLabels)
+
+        binding.spinnerSourceLang.adapter = srcAdapter
+        binding.spinnerTargetLang.adapter = dstAdapter
+
+        // Default: JP -> ID
+        binding.spinnerSourceLang.setSelection(0)
+        binding.spinnerTargetLang.setSelection(2)
+
+        val listener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                rebuildTranslator()
+                checkSelectedModels()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        binding.spinnerMode.onItemSelectedListener = listener
+        binding.spinnerSourceLang.onItemSelectedListener = listener
+        binding.spinnerTargetLang.onItemSelectedListener = listener
+    }
+
+    private fun selectedMode(): String =
+        modes.getOrElse(binding.spinnerMode.selectedItemPosition) { modes.first() }
+
+    private fun selectedSource(): LangOption =
+        languages.getOrElse(binding.spinnerSourceLang.selectedItemPosition) { languages.first() }
+
+    private fun selectedTarget(): LangOption =
+        languages.getOrElse(binding.spinnerTargetLang.selectedItemPosition) { languages[2] }
+
+    private fun rebuildTranslator() {
+        translator?.close()
+        val options = TranslatorOptions.Builder()
+            .setSourceLanguage(selectedSource().mlKitCode)
+            .setTargetLanguage(selectedTarget().mlKitCode)
+            .build()
+        translator = Translation.getClient(options)
+    }
+
+    private fun checkSelectedModels() {
+        val src = selectedSource()
+        val dst = selectedTarget()
+        binding.tvModelStatus.text = "Status model (${src.mlKitCode} -> ${dst.mlKitCode}): Mengecek..."
+
+        modelManager.getDownloadedModels(TranslateRemoteModel::class.java)
+            .addOnSuccessListener { models ->
+                val codes = models.map { it.language }.toSet()
+                val hasSrc = codes.contains(src.mlKitCode)
+                val hasDst = codes.contains(dst.mlKitCode)
+                binding.tvModelStatus.text = if (hasSrc && hasDst) {
+                    "Status model: Siap offline (${src.mlKitCode.uppercase()} -> ${dst.mlKitCode.uppercase()})"
+                } else {
+                    "Status model: Belum lengkap (${src.mlKitCode.uppercase()}: ${if (hasSrc) "OK" else "Belum"}, ${dst.mlKitCode.uppercase()}: ${if (hasDst) "OK" else "Belum"})"
+                }
+            }
+            .addOnFailureListener { e ->
+                binding.tvModelStatus.text = "Status model: Gagal cek (${e.localizedMessage ?: "error"})"
+            }
+    }
+
+    private fun downloadSelectedModels() {
+        val src = selectedSource()
+        val dst = selectedTarget()
+        binding.tvModelStatus.text = "Mengunduh paket ${src.mlKitCode.uppercase()} & ${dst.mlKitCode.uppercase()}..."
+
+        translator?.downloadModelIfNeeded(DownloadConditions.Builder().build())
+            ?.addOnSuccessListener {
+                checkSelectedModels()
+                Toast.makeText(this, "Paket bahasa siap dipakai offline", Toast.LENGTH_SHORT).show()
+            }
+            ?.addOnFailureListener { e ->
+                binding.tvModelStatus.text = "Gagal unduh: ${e.localizedMessage ?: "cek koneksi"}"
+            }
+    }
+
+    private fun startBubbleWithCurrentSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             setSwitchQuietly(false)
             startActivity(
@@ -75,26 +174,35 @@ class MainActivity : AppCompatActivity() {
             )
             Toast.makeText(
                 this,
-                "Aktifkan 'Tampil di atas aplikasi lain', lalu nyalakan lagi",
+                "Aktifkan 'Tampil di atas aplikasi lain', lalu tekan Mulai",
                 Toast.LENGTH_LONG
             ).show()
             return
         }
 
-        startService(Intent(this, FloatingBubbleService::class.java))
-        syncFloatingUiState(true)
-        Toast.makeText(this, "Floating Bubble ON", Toast.LENGTH_SHORT).show()
+        val src = selectedSource()
+        val dst = selectedTarget()
+        val intent = Intent(this, FloatingBubbleService::class.java).apply {
+            putExtra(FloatingBubbleService.EXTRA_MODE, selectedMode())
+            putExtra(FloatingBubbleService.EXTRA_SRC_LANG, src.mlKitCode)
+            putExtra(FloatingBubbleService.EXTRA_DST_LANG, dst.mlKitCode)
+        }
+        startService(intent)
+        syncFloatingUi(true)
     }
 
-    private fun disableFloatingBubble() {
+    private fun stopBubbleService() {
         stopService(Intent(this, FloatingBubbleService::class.java))
-        syncFloatingUiState(false)
-        Toast.makeText(this, "Floating Bubble OFF", Toast.LENGTH_SHORT).show()
+        syncFloatingUi(false)
     }
 
-    private fun syncFloatingUiState(running: Boolean) {
+    private fun syncFloatingUi(running: Boolean) {
         setSwitchQuietly(running)
-        binding.tvBubbleState.text = if (running) "Status: ON (Melayang aktif)" else "Status: OFF"
+        binding.tvBubbleState.text = if (running) {
+            "Bubble Overlay: ON (${selectedMode()})"
+        } else {
+            "Bubble Overlay: OFF"
+        }
     }
 
     private fun setSwitchQuietly(checked: Boolean) {
@@ -103,44 +211,8 @@ class MainActivity : AppCompatActivity() {
         isUpdatingSwitch = false
     }
 
-    private fun checkDownloadedModels() {
-        binding.tvModelStatus.text = "Status model: Mengecek model JP & ID..."
-        modelManager.getDownloadedModels(TranslateRemoteModel::class.java)
-            .addOnSuccessListener { models ->
-                val downloadedCodes = models.map { it.language }.toSet()
-                val hasJp = downloadedCodes.contains(TranslateLanguage.JAPANESE)
-                val hasId = downloadedCodes.contains(TranslateLanguage.INDONESIAN)
-                if (hasJp && hasId) {
-                    binding.tvModelStatus.text = "Status model: Siap digunakan! (JP & ID aktif)"
-                } else {
-                    binding.tvModelStatus.text =
-                        "Status model: Belum lengkap (JP: ${if (hasJp) "OK" else "Belum"}, ID: ${if (hasId) "OK" else "Belum"})"
-                }
-            }
-            .addOnFailureListener { e ->
-                binding.tvModelStatus.text = "Status model: Gagal cek (${e.localizedMessage ?: "error"})"
-            }
-    }
-
-    private fun downloadModelsNow() {
-        binding.tvModelStatus.text = "Status model: Mengunduh model JP & ID..."
-        val conditions = DownloadConditions.Builder().build()
-
-        translator.downloadModelIfNeeded(conditions)
-            .addOnSuccessListener {
-                checkDownloadedModels()
-            }
-            .addOnFailureListener { e ->
-                binding.tvModelStatus.text =
-                    "Status model: Gagal unduh (${e.localizedMessage ?: "cek koneksi / Play Services"})"
-            }
-            .addOnCanceledListener {
-                binding.tvModelStatus.text = "Status model: Unduhan dibatalkan."
-            }
-    }
-
     override fun onDestroy() {
-        translator.close()
+        translator?.close()
         super.onDestroy()
     }
 }
