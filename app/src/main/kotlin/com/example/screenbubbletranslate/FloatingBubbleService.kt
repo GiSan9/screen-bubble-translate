@@ -32,7 +32,6 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.mlkit.nl.translate.TranslateLanguage
@@ -91,7 +90,6 @@ class FloatingBubbleService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tvModeBadgeRef: TextView? = null
     private var tvResultRef: TextView? = null
-    private var tvSourcePreviewRef: TextView? = null
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -252,15 +250,15 @@ class FloatingBubbleService : Service() {
     }
 
     /**
-     * Membersihkan teks OCR dan memperbaiki typo umum agar terjemahan lebih rapi.
+     * Memilih satu baris/kalimat dialog yang paling bersih agar tidak mencampur banyak kotak sekaligus.
      */
-    private fun cleanOcrText(raw: String): String {
+    private fun extractCleanDialog(raw: String): String {
         val dateRegex = Regex("""^\d{1,2}/\d{1,2}/\d{2,4}(\s*\+.*)?$""")
         val sizeRegex = Regex("""^\d+(\.\d+)?\s*(kb|mb|gb|b)$""", RegexOption.IGNORE_CASE)
         val clockRegex = Regex("""^\d{1,2}\.\d{2}(\s+[A-Z])?$""")
         val noiseTokens = setOf("zip", "rar", "7z", "apk", "xapk", "obb", "folder", "item", "items", "unduh")
 
-        val lines = raw.lines()
+        val cleanLines = raw.lines()
             .map { it.trim() }
             .filter { line ->
                 if (line.length < 2) return@filter false
@@ -271,24 +269,27 @@ class FloatingBubbleService : Service() {
                 if (clockRegex.matches(line)) return@filter false
                 true
             }
-            .distinct()
 
-        var joined = lines.joinToString(" ")
+        if (cleanLines.isEmpty()) return ""
+
+        val selected = if (currentMode == "Terjemah Layar Penuh") {
+            cleanLines.maxByOrNull { it.length } ?: cleanLines.first()
+        } else {
+            cleanLines.take(3).joinToString(" ")
+        }
+
+        return selected
             .replace(Regex("""\s+"""), " ")
             .replace(Regex("""\bouite\b""", RegexOption.IGNORE_CASE), "quite")
             .replace(Regex("""\bexclusve\b""", RegexOption.IGNORE_CASE), "exclusive")
             .replace(Regex("""\bconflct\b""", RegexOption.IGNORE_CASE), "conflict")
             .replace(Regex("""\bas wel\b""", RegexOption.IGNORE_CASE), "as well")
             .trim()
-
-        val maxLen = if (currentMode == "Terjemah Layar Penuh") 220 else 280
-        if (joined.length > maxLen) {
-            joined = joined.take(maxLen) + "..."
-        }
-        return joined
+            .let { if (it.length > 140) it.take(140).substringBeforeLast(" ").ifBlank { it.take(140) } else it }
+            .trim()
     }
 
-    private fun makePillButton(label: String, bgHex: String, textHex: String): Button {
+    private fun makePillButton(label: String, bgHex: String, textHex: String, borderHex: String): Button {
         return Button(this).apply {
             text = label
             textSize = 11f
@@ -297,9 +298,9 @@ class FloatingBubbleService : Service() {
             background = GradientDrawable().apply {
                 setColor(Color.parseColor(bgHex))
                 cornerRadius = 999f
-                setStroke(2, Color.parseColor("#334155"))
+                setStroke(2, Color.parseColor(borderHex))
             }
-            setPadding(16, 8, 16, 8)
+            setPadding(10, 6, 10, 6)
         }
     }
 
@@ -323,7 +324,7 @@ class FloatingBubbleService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        val sizePx = (54 * resources.displayMetrics.density).toInt()
+        val sizePx = (50 * resources.displayMetrics.density).toInt()
         val bubbleParams = WindowManager.LayoutParams(
             sizePx,
             sizePx,
@@ -332,13 +333,13 @@ class FloatingBubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (screenWidth - sizePx - 24).coerceAtLeast(16)
+            x = (screenWidth - sizePx - 20).coerceAtLeast(16)
             y = (screenHeight * 0.24f).toInt().coerceAtLeast(80)
         }
 
-        // Kotak area untuk mode "Terjemah Sebagian" (pas untuk 1 balon dialog / narasi)
-        val cropW = (screenWidth * 0.72f).toInt().coerceAtLeast(220)
-        val cropH = (screenHeight * 0.16f).toInt().coerceAtLeast(110)
+        // Kotak area untuk mode "Terjemah Sebagian"
+        val cropW = (screenWidth * 0.66f).toInt().coerceAtLeast(190)
+        val cropH = (screenHeight * 0.14f).toInt().coerceAtLeast(92)
         val cParams = WindowManager.LayoutParams(
             cropW,
             cropH,
@@ -348,7 +349,7 @@ class FloatingBubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = ((screenWidth - cropW) / 2).coerceAtLeast(0)
-            y = (screenHeight * 0.45f).toInt().coerceAtLeast(0)
+            y = (screenHeight * 0.42f).toInt().coerceAtLeast(0)
         }
         cropParams = cParams
 
@@ -356,20 +357,20 @@ class FloatingBubbleService : Service() {
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#24F472B6"))
                 setStroke(3, Color.parseColor("#F472B6"))
-                cornerRadius = 18f
+                cornerRadius = 16f
             }
             visibility = View.GONE
         }
 
         val cropLabel = TextView(this).apply {
-            text = "✦ Fokus Area Dialog"
+            text = "✦ Dialog"
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#D9831843"))
-                cornerRadius = 12f
+                cornerRadius = 10f
             }
-            textSize = 11f
-            setPadding(14, 4, 14, 4)
+            textSize = 10f
+            setPadding(12, 3, 12, 3)
         }
         cropBox.addView(cropLabel)
 
@@ -398,14 +399,14 @@ class FloatingBubbleService : Service() {
             }
         }
 
-        // Subtitle box bergaya anime di bagian bawah layar
+        // Subtitle box anime minimalis & bersih di bagian bawah layar
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(26, 20, 26, 20)
+            setPadding(24, 16, 24, 16)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#EE0F172A"))
-                cornerRadius = 32f
-                setStroke(3, Color.parseColor("#38BDF8"))
+                setColor(Color.parseColor("#F20B1120"))
+                cornerRadius = 28f
+                setStroke(2, Color.parseColor("#38BDF8"))
             }
             visibility = View.GONE
         }
@@ -418,92 +419,88 @@ class FloatingBubbleService : Service() {
         val tvModeBadge = TextView(this).apply {
             text = "✦ $currentMode • JA → ID"
             setTextColor(Color.parseColor("#7DD3FC"))
-            textSize = 11f
+            textSize = 10f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1E293B"))
+                setColor(Color.parseColor("#172554"))
                 cornerRadius = 999f
             }
-            setPadding(14, 5, 14, 5)
+            setPadding(12, 4, 12, 4)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
         val btnSwitchMode = TextView(this).apply {
-            text = "Ganti Mode"
+            text = "Mode"
             setTextColor(Color.parseColor("#F9A8D4"))
             textSize = 11f
-            setPadding(14, 4, 12, 4)
+            setPadding(10, 4, 8, 4)
+        }
+
+        val btnZoomIn = TextView(this).apply {
+            text = "+"
+            setTextColor(Color.parseColor("#BAE6FD"))
+            textSize = 14f
+            setPadding(8, 2, 6, 2)
+        }
+
+        val btnZoomOut = TextView(this).apply {
+            text = "-"
+            setTextColor(Color.parseColor("#BAE6FD"))
+            textSize = 14f
+            setPadding(6, 2, 8, 2)
         }
 
         val btnClose = TextView(this).apply {
             text = "✕"
             setTextColor(Color.parseColor("#FDA4AF"))
-            textSize = 15f
-            setPadding(12, 4, 4, 4)
+            textSize = 14f
+            setPadding(8, 2, 2, 2)
         }
 
         topBar.addView(tvModeBadge)
         topBar.addView(btnSwitchMode)
+        topBar.addView(btnZoomIn)
+        topBar.addView(btnZoomOut)
         topBar.addView(btnClose)
 
-        val tvSourcePreview = TextView(this).apply {
-            text = ""
-            setTextColor(Color.parseColor("#94A3B8"))
-            textSize = 11f
-            maxLines = 1
+        val tvResult = TextView(this).apply {
+            text = "Arahkan kotak ke dialog lalu ketuk Pindai."
+            setTextColor(Color.parseColor("#F8FAFC"))
+            textSize = 14f
+            maxLines = 3
             ellipsize = TextUtils.TruncateAt.END
-            visibility = View.GONE
-            setPadding(4, 8, 4, 2)
-        }
-
-        val scrollResult = ScrollView(this).apply {
-            val maxH = (115 * resources.displayMetrics.density).toInt()
+            setLineSpacing(4f, 1.18f)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = 6
+                topMargin = 10
                 bottomMargin = 12
             }
-            post {
-                if (height > maxH) {
-                    layoutParams = (layoutParams as LinearLayout.LayoutParams).apply {
-                        height = maxH
-                    }
-                }
-            }
         }
-
-        val tvResult = TextView(this).apply {
-            text = "Geser kotak ke dialog lalu ketuk ✦ atau Pindai."
-            setTextColor(Color.parseColor("#F8FAFC"))
-            textSize = 15f
-            setLineSpacing(5f, 1.18f)
-        }
-        scrollResult.addView(tvResult)
 
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        val btnScanNow = makePillButton("Pindai", "#EC4899", "#FFFFFF").apply {
+        val btnScanNow = makePillButton("Pindai", "#DB2777", "#FFFFFF", "#F472B6").apply {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = 6
+                marginEnd = 5
             }
         }
 
-        val btnCopy = makePillButton("Salin", "#1E293B", "#E2E8F0").apply {
+        val btnCopy = makePillButton("Salin", "#1E293B", "#E2E8F0", "#334155").apply {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 6
-                rightMargin = 6
+                leftMargin = 5
+                rightMargin = 5
             }
         }
 
-        val btnOff = makePillButton("OFF", "#31102F", "#FDA4AF").apply {
+        val btnOff = makePillButton("OFF", "#2A0D29", "#FDA4AF", "#831843").apply {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = 6
+                marginStart = 5
             }
         }
 
@@ -512,8 +509,7 @@ class FloatingBubbleService : Service() {
         actionRow.addView(btnOff)
 
         panel.addView(topBar)
-        panel.addView(tvSourcePreview)
-        panel.addView(scrollResult)
+        panel.addView(tvResult)
         panel.addView(actionRow)
 
         val panelWidth = (screenWidth * 0.92f).toInt().coerceAtLeast(280)
@@ -526,7 +522,36 @@ class FloatingBubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = ((screenWidth - panelWidth) / 2).coerceAtLeast(0)
-            y = (screenHeight * 0.75f).toInt().coerceAtLeast(0)
+            y = (screenHeight * 0.78f).toInt().coerceAtLeast(0)
+        }
+
+        fun showPanel(show: Boolean) {
+            panel.visibility = if (show) View.VISIBLE else View.GONE
+            bubble.visibility = if (show) View.GONE else View.VISIBLE
+        }
+
+        fun resizeCropBox(deltaW: Int, deltaH: Int) {
+            val cp = cropParams ?: return
+            val box = cropBoxView ?: return
+            cp.width = (cp.width + deltaW).coerceIn(170, (screenWidth * 0.94f).toInt())
+            cp.height = (cp.height + deltaH).coerceIn(80, (screenHeight * 0.45f).toInt())
+            cp.x = cp.x.coerceIn(0, (screenWidth - cp.width).coerceAtLeast(0))
+            cp.y = cp.y.coerceIn(0, (screenHeight - cp.height).coerceAtLeast(0))
+            if (box.windowToken != null) {
+                windowManager?.updateViewLayout(box, cp)
+            }
+        }
+
+        btnZoomIn.setOnClickListener {
+            currentMode = "Terjemah Sebagian"
+            updateModeVisibility()
+            resizeCropBox(56, 32)
+        }
+
+        btnZoomOut.setOnClickListener {
+            currentMode = "Terjemah Sebagian"
+            updateModeVisibility()
+            resizeCropBox(-56, -32)
         }
 
         btnSwitchMode.setOnClickListener {
@@ -542,7 +567,7 @@ class FloatingBubbleService : Service() {
 
         btnCopy.setOnClickListener {
             val out = tvResult.text.toString()
-            if (out.isNotBlank() && !out.startsWith("Geser kotak")) {
+            if (out.isNotBlank() && !out.startsWith("Arahkan kotak")) {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 cm?.setPrimaryClip(ClipData.newPlainText("Anime TL", out))
                 Toast.makeText(this, "Terjemahan disalin", Toast.LENGTH_SHORT).show()
@@ -554,7 +579,7 @@ class FloatingBubbleService : Service() {
         }
 
         btnClose.setOnClickListener {
-            panel.visibility = View.GONE
+            showPanel(false)
         }
 
         var initX = 0
@@ -584,9 +609,8 @@ class FloatingBubbleService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
-                        val willShow = panel.visibility != View.VISIBLE
-                        panel.visibility = if (willShow) View.VISIBLE else View.GONE
-                        if (willShow && (currentMode == "Terjemah Layar Penuh" || currentMode == "Terjemah Sebagian")) {
+                        showPanel(true)
+                        if (currentMode == "Terjemah Layar Penuh" || currentMode == "Terjemah Sebagian") {
                             captureAndTranslate(silentIfSame = false)
                         }
                     }
@@ -598,7 +622,6 @@ class FloatingBubbleService : Service() {
 
         tvModeBadgeRef = tvModeBadge
         tvResultRef = tvResult
-        tvSourcePreviewRef = tvSourcePreview
         panelView = panel
         cropBoxView = cropBox
         bubbleView = bubble
@@ -674,11 +697,10 @@ class FloatingBubbleService : Service() {
                 onSuccess = { rawDetected ->
                     croppedBitmap.recycle()
                     isBusyOcr = false
-                    val cleaned = cleanOcrText(rawDetected)
+                    val cleaned = extractCleanDialog(rawDetected)
                     if (cleaned.isBlank()) {
                         if (!silentIfSame) {
-                            tvSourcePreviewRef?.visibility = View.GONE
-                            tvResultRef?.text = "Tidak ada teks jelas terdeteksi di area ini."
+                            tvResultRef?.text = "Tidak ada teks jelas di area ini."
                         }
                         return@recognize
                     }
@@ -686,9 +708,8 @@ class FloatingBubbleService : Service() {
                         return@recognize
                     }
                     lastRecognizedText = cleaned
-                    tvSourcePreviewRef?.visibility = View.VISIBLE
-                    tvSourcePreviewRef?.text = cleaned
                     panelView?.visibility = View.VISIBLE
+                    bubbleView?.visibility = View.GONE
                     translateText(cleaned)
                 },
                 onError = { err ->
