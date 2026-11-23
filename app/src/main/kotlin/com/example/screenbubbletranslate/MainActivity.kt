@@ -1,6 +1,8 @@
 package com.example.screenbubbletranslate
 
+import android.app.Activity
 import android.content.Intent
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -9,6 +11,7 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.example.screenbubbletranslate.databinding.ActivityMainBinding
 import com.google.mlkit.common.model.DownloadConditions
@@ -43,6 +46,21 @@ class MainActivity : AppCompatActivity() {
     private val modelManager = RemoteModelManager.getInstance()
     private var isUpdatingSwitch = false
 
+    private val projectionManager by lazy {
+        getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    }
+
+    private val screenCaptureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            launchBubbleService(result.resultCode, result.data!!)
+        } else {
+            setSwitchQuietly(false)
+            Toast.makeText(this, "Izin tangkap layar dibatalkan", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -58,7 +76,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnStartBubble.setOnClickListener {
-            startBubbleWithCurrentSettings()
+            requestStartBubble()
         }
 
         binding.btnStopBubble.setOnClickListener {
@@ -68,7 +86,7 @@ class MainActivity : AppCompatActivity() {
         binding.switchFloating.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingSwitch) return@setOnCheckedChangeListener
             if (isChecked) {
-                startBubbleWithCurrentSettings()
+                requestStartBubble()
             } else {
                 stopBubbleService()
             }
@@ -91,7 +109,6 @@ class MainActivity : AppCompatActivity() {
         binding.spinnerSourceLang.adapter = srcAdapter
         binding.spinnerTargetLang.adapter = dstAdapter
 
-        // Default: JP -> ID
         binding.spinnerSourceLang.setSelection(0)
         binding.spinnerTargetLang.setSelection(2)
 
@@ -163,7 +180,7 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    private fun startBubbleWithCurrentSettings() {
+    private fun requestStartBubble() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             setSwitchQuietly(false)
             startActivity(
@@ -180,14 +197,24 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+    }
+
+    private fun launchBubbleService(resultCode: Int, data: Intent) {
         val src = selectedSource()
         val dst = selectedTarget()
         val intent = Intent(this, FloatingBubbleService::class.java).apply {
             putExtra(FloatingBubbleService.EXTRA_MODE, selectedMode())
             putExtra(FloatingBubbleService.EXTRA_SRC_LANG, src.mlKitCode)
             putExtra(FloatingBubbleService.EXTRA_DST_LANG, dst.mlKitCode)
+            putExtra(FloatingBubbleService.EXTRA_RESULT_CODE, resultCode)
+            putExtra(FloatingBubbleService.EXTRA_DATA, data)
         }
-        startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
         syncFloatingUi(true)
     }
 
