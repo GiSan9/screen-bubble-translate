@@ -15,7 +15,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Screen Bubble TL"
+            android:text="Bubble Translate"
             android:textColor="#F9FAFB"
             android:textSize="24sp"
             android:textStyle="bold" />
@@ -24,15 +24,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Floating Translator (JP -&gt; ID)"
+            android:text="Terjemah Offline Multi-Bahasa &amp; Floating Bubble"
             android:textColor="#9CA3AF"
             android:textSize="13sp" />
 
-        <!-- Card Status Model -->
+        <!-- Card Mode & Bahasa -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
             app:cardBackgroundColor="#161B22"
             app:cardCornerRadius="16dp"
             app:strokeColor="#2A3241"
@@ -47,33 +47,100 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Kamus Bahasa (On-Device)"
+                    android:text="Mode Terjemahan"
                     android:textColor="#E5E7EB"
-                    android:textSize="15sp"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spinnerMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="8dp"
+                    android:background="#1F2937"
+                    android:padding="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Bahasa Asal"
+                            android:textColor="#9CA3AF"
+                            android:textSize="12sp" />
+
+                        <Spinner
+                            android:id="@+id/spinnerSourceLang"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="4dp"
+                            android:background="#1F2937" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="10dp"
+                        android:paddingTop="14dp"
+                        android:text="⇄"
+                        android:textColor="#93C5FD"
+                        android:textSize="18sp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Bahasa Tujuan"
+                            android:textColor="#9CA3AF"
+                            android:textSize="12sp" />
+
+                        <Spinner
+                            android:id="@+id/spinnerTargetLang"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="4dp"
+                            android:background="#1F2937" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/tvModelStatus"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="Status model: Mengecek model JP &amp; ID..."
+                    android:layout_marginTop="12dp"
+                    android:text="Status model: Mengecek..."
                     android:textColor="#93C5FD"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnDownloadModel"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="12dp"
-                    android:text="1. Unduh / Cek Model JP -&gt; ID"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="10dp"
+                    android:text="Unduh Paket Bahasa (Offline)"
                     android:textAllCaps="false"
-                    app:backgroundTint="#2563EB"
+                    app:backgroundTint="#1D4ED8"
                     app:cornerRadius="12dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Card Kontrol Floating Bubble ON/OFF -->
+        <!-- Card Kontrol Mulai & ON/OFF -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -95,29 +162,15 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
-                    <LinearLayout
+                    <TextView
+                        android:id="@+id/tvBubbleState"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Floating Bubble Overlay"
-                            android:textColor="#E5E7EB"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/tvBubbleState"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:text="Status: OFF"
-                            android:textColor="#9CA3AF"
-                            android:textSize="12sp" />
-                    </LinearLayout>
+                        android:text="Bubble Overlay: OFF"
+                        android:textColor="#E5E7EB"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switchFloating"
@@ -127,45 +180,28 @@
                         android:textColor="#E5E7EB" />
                 </LinearLayout>
 
-                <LinearLayout
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnStartBubble"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="50dp"
                     android:layout_marginTop="12dp"
-                    android:orientation="horizontal">
+                    android:text="Mulai"
+                    android:textAllCaps="false"
+                    android:textSize="15sp"
+                    app:backgroundTint="#16A34A"
+                    app:cornerRadius="12dp" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnStartBubble"
-                        android:layout_width="0dp"
-                        android:layout_height="46dp"
-                        android:layout_marginEnd="6dp"
-                        android:layout_weight="1"
-                        android:text="Nyalakan"
-                        android:textAllCaps="false"
-                        app:backgroundTint="#16A34A"
-                        app:cornerRadius="12dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnStopBubble"
-                        android:layout_width="0dp"
-                        android:layout_height="46dp"
-                        android:layout_marginStart="6dp"
-                        android:layout_weight="1"
-                        android:text="Matikan"
-                        android:textAllCaps="false"
-                        app:backgroundTint="#DC2626"
-                        app:cornerRadius="12dp" />
-                </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnStopBubble"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Matikan Bubble"
+                    android:textAllCaps="false"
+                    app:backgroundTint="#DC2626"
+                    app:cornerRadius="12dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:lineSpacingExtra="3dp"
-            android:text="Tips: Salin teks Jepang dari mana saja, lalu ketuk bubble biru TL di atas layar untuk membuka kotak terjemahan dan menerjemahkannya."
-            android:textColor="#8B949E"
-            android:textSize="12sp" />
 
     </LinearLayout>
 </ScrollView>
