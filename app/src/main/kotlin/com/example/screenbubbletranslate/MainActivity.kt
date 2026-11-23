@@ -54,7 +54,9 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            launchBubbleService(result.resultCode, result.data!!)
+            FloatingBubbleService.pendingResultCode = result.resultCode
+            FloatingBubbleService.pendingProjectionData = result.data
+            launchBubbleService()
         } else {
             setSwitchQuietly(false)
             Toast.makeText(this, "Izin tangkap layar dibatalkan", Toast.LENGTH_SHORT).show()
@@ -200,25 +202,30 @@ class MainActivity : AppCompatActivity() {
         screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
 
-    private fun launchBubbleService(resultCode: Int, data: Intent) {
+    private fun launchBubbleService() {
         val src = selectedSource()
         val dst = selectedTarget()
         val intent = Intent(this, FloatingBubbleService::class.java).apply {
             putExtra(FloatingBubbleService.EXTRA_MODE, selectedMode())
             putExtra(FloatingBubbleService.EXTRA_SRC_LANG, src.mlKitCode)
             putExtra(FloatingBubbleService.EXTRA_DST_LANG, dst.mlKitCode)
-            putExtra(FloatingBubbleService.EXTRA_RESULT_CODE, resultCode)
-            putExtra(FloatingBubbleService.EXTRA_DATA, data)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            syncFloatingUi(true)
+        } catch (e: Exception) {
+            setSwitchQuietly(false)
+            Toast.makeText(this, "Gagal memulai: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
-        syncFloatingUi(true)
     }
 
     private fun stopBubbleService() {
+        FloatingBubbleService.pendingResultCode = Activity.RESULT_CANCELED
+        FloatingBubbleService.pendingProjectionData = null
         stopService(Intent(this, FloatingBubbleService::class.java))
         syncFloatingUi(false)
     }
