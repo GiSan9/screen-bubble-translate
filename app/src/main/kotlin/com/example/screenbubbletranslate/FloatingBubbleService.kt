@@ -45,8 +45,9 @@ class FloatingBubbleService : Service() {
         const val EXTRA_MODE = "extra_mode"
         const val EXTRA_SRC_LANG = "extra_src_lang"
         const val EXTRA_DST_LANG = "extra_dst_lang"
-        const val EXTRA_RESULT_CODE = "extra_result_code"
-        const val EXTRA_DATA = "extra_data"
+
+        var pendingResultCode: Int = Activity.RESULT_CANCELED
+        var pendingProjectionData: Intent? = null
 
         private const val CHANNEL_ID = "bubble_tl_channel"
         private const val NOTIF_ID = 1001
@@ -91,13 +92,21 @@ class FloatingBubbleService : Service() {
     private var tvResultRef: TextView? = null
     private var etManualRef: EditText? = null
 
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            mainHandler.post {
+                releaseDisplayOnly()
+            }
+        }
+    }
+
     private val autoLoopRunnable = object : Runnable {
         override fun run() {
             if (!isRunning) return
             if (currentMode == "Terjemahan Real-time" || currentMode == "Terjemah Otomatis") {
                 captureAndTranslate(silentIfSame = true)
             }
-            mainHandler.postDelayed(this, 2200L)
+            mainHandler.postDelayed(this, 2500L)
         }
     }
 
@@ -108,17 +117,22 @@ class FloatingBubbleService : Service() {
         isRunning = true
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager?.defaultDisplay?.getRealMetrics(metrics)
-        screenWidth = metrics.widthPixels.coerceAtLeast(360)
-        screenHeight = metrics.heightPixels.coerceAtLeast(640)
-        screenDensity = metrics.densityDpi.coerceAtLeast(160)
+        try {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager?.defaultDisplay?.getRealMetrics(metrics)
+            screenWidth = metrics.widthPixels.coerceAtLeast(360)
+            screenHeight = metrics.heightPixels.coerceAtLeast(640)
+            screenDensity = metrics.densityDpi.coerceAtLeast(160)
 
-        startAsForeground()
-        initUi()
-        rebuildTranslator()
-        mainHandler.postDelayed(autoLoopRunnable, 1500L)
+            startAsForegroundSafe()
+            initUiSafe()
+            rebuildTranslator()
+            mainHandler.postDelayed(autoLoopRunnable, 2000L)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Init error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -126,94 +140,116 @@ class FloatingBubbleService : Service() {
         intent?.getStringExtra(EXTRA_SRC_LANG)?.let { srcLang = it }
         intent?.getStringExtra(EXTRA_DST_LANG)?.let { dstLang = it }
 
-        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
-            ?: Activity.RESULT_CANCELED
-        val dataIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent?.getParcelableExtra(EXTRA_DATA, Intent::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent?.getParcelableExtra(EXTRA_DATA)
-        }
-
-        if (resultCode == Activity.RESULT_OK && dataIntent != null) {
-            setupMediaProjection(resultCode, dataIntent)
-        }
-
         rebuildTranslator()
         updateModeVisibility()
+
+        val data = pendingProjectionData
+        if (pendingResultCode == Activity.RESULT_OK && data != null && mediaProjection == null) {
+            mainHandler.postDelayed({
+                setupMediaProjectionSafe(pendingResultCode, data)
+            }, 350L)
+        }
         return START_STICKY
     }
 
-    private fun startAsForeground() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Bubble Translate Active",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val nm = getSystemService(NotificationManager::class.java)
-            nm?.createNotificationChannel(channel)
-        }
-
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }.setContentTitle("Bubble Translate Aktif")
-            .setContentText("Layanan overlay & tangkap layar berjalan")
-            .setSmallIcon(android.R.drawable.ic_menu_search)
-
-        val notification = builder.build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+    private fun startAsForegroundSafe() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    "Bubble Translate Active",
+                    NotificationManager.IMPORTANCE_LOW
+                )
+                val nm = getSystemService(NotificationManager::class.java)
+                nm?.createNotificationChannel(channel)
             }
-            startForeground(NOTIF_ID, notification, type)
-        } else {
-            startForeground(NOTIF_ID, notification)
+
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(this, CHANNEL_ID)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(this)
+            }.setContentTitle("Bubble Translate Aktif")
+                .setContentText("Layanan overlay berjalan")
+                .setSmallIcon(android.R.drawable.ic_menu_search)
+
+            val notification = builder.build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+            } else {
+                startForeground(NOTIF_ID, notification)
+            }
+        } catch (_: Exception) {
         }
     }
 
-    private fun setupMediaProjection(resultCode: Int, data: Intent) {
-        releaseProjection()
-        val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        val mp = mpm.getMediaProjection(resultCode, data) ?: return
-        mediaProjection = mp
+    private fun setupMediaProjectionSafe(resultCode: Int, data: Intent) {
+        try {
+            releaseProjection()
+            val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            val mp = mpm.getMediaProjection(resultCode, data) ?: return
+            mediaProjection = mp
 
-        val reader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
-        imageReader = reader
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                mp.registerCallback(projectionCallback, mainHandler)
+            } else {
+                try {
+                    mp.registerCallback(projectionCallback, mainHandler)
+                } catch (_: Exception) {
+                }
+            }
 
-        virtualDisplay = mp.createVirtualDisplay(
-            "BubbleTranslateCapture",
-            screenWidth,
-            screenHeight,
-            screenDensity,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            reader.surface,
-            null,
-            null
-        )
+            val reader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+            imageReader = reader
+
+            virtualDisplay = mp.createVirtualDisplay(
+                "BubbleTranslateCapture",
+                screenWidth,
+                screenHeight,
+                screenDensity,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.surface,
+                null,
+                mainHandler
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "OCR layar: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun releaseDisplayOnly() {
+        try {
+            virtualDisplay?.release()
+            virtualDisplay = null
+            imageReader?.close()
+            imageReader = null
+        } catch (_: Exception) {
+        }
     }
 
     private fun releaseProjection() {
-        virtualDisplay?.release()
-        virtualDisplay = null
-        imageReader?.close()
-        imageReader = null
-        mediaProjection?.stop()
+        releaseDisplayOnly()
+        try {
+            mediaProjection?.unregisterCallback(projectionCallback)
+        } catch (_: Exception) {
+        }
+        try {
+            mediaProjection?.stop()
+        } catch (_: Exception) {
+        }
         mediaProjection = null
     }
 
     private fun rebuildTranslator() {
-        translator?.close()
-        val options = TranslatorOptions.Builder()
-            .setSourceLanguage(srcLang)
-            .setTargetLanguage(dstLang)
-            .build()
-        translator = Translation.getClient(options)
+        try {
+            translator?.close()
+            val options = TranslatorOptions.Builder()
+                .setSourceLanguage(srcLang)
+                .setTargetLanguage(dstLang)
+                .build()
+            translator = Translation.getClient(options)
+        } catch (_: Exception) {
+        }
     }
 
     private fun updateModeVisibility() {
@@ -222,7 +258,7 @@ class FloatingBubbleService : Service() {
         cropBoxView?.visibility = if (showCrop) View.VISIBLE else View.GONE
     }
 
-    private fun initUi() {
+    private fun initUiSafe() {
         val circleBg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.parseColor("#2563EB"))
@@ -257,7 +293,6 @@ class FloatingBubbleService : Service() {
             y = 160
         }
 
-        // Kotak area untuk mode "Terjemah Sebagian"
         val cropW = (screenWidth * 0.82f).toInt().coerceAtLeast(260)
         val cropH = (screenHeight * 0.20f).toInt().coerceAtLeast(140)
         val cParams = WindowManager.LayoutParams(
@@ -316,7 +351,6 @@ class FloatingBubbleService : Service() {
             }
         }
 
-        // Panel hasil terjemahan melayang
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(26, 20, 26, 20)
@@ -359,7 +393,7 @@ class FloatingBubbleService : Service() {
         topBar.addView(btnClose)
 
         val tvResult = TextView(this).apply {
-            text = "Ketuk Pindai Layar atau tempel teks di bawah."
+            text = "Ketuk Pindai atau tempel teks di bawah."
             setTextColor(Color.WHITE)
             textSize = 15f
             setPadding(0, 10, 0, 10)
@@ -518,15 +552,12 @@ class FloatingBubbleService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
-                        if (currentMode == "Terjemah Layar Penuh" || currentMode == "Terjemah Sebagian") {
-                            panel.visibility = View.VISIBLE
+                        val willShow = panel.visibility != View.VISIBLE
+                        panel.visibility = if (willShow) View.VISIBLE else View.GONE
+                        if (!willShow) {
+                            setPanelFocusable(false)
+                        } else if (currentMode == "Terjemah Layar Penuh" || currentMode == "Terjemah Sebagian") {
                             captureAndTranslate(silentIfSame = false)
-                        } else {
-                            val willShow = panel.visibility != View.VISIBLE
-                            panel.visibility = if (willShow) View.VISIBLE else View.GONE
-                            if (!willShow) {
-                                setPanelFocusable(false)
-                            }
                         }
                     }
                     true
@@ -550,13 +581,23 @@ class FloatingBubbleService : Service() {
 
     private fun captureAndTranslate(silentIfSame: Boolean) {
         if (isBusyOcr) return
-        val reader = imageReader ?: return
+        val reader = imageReader ?: run {
+            if (!silentIfSame) {
+                tvResultRef?.text = "Tangkap layar belum siap. Coba tekan Pindai lagi atau ketik/tempel teks."
+            }
+            return
+        }
 
         val image = try {
             reader.acquireLatestImage()
         } catch (_: Exception) {
             null
-        } ?: return
+        } ?: run {
+            if (!silentIfSame) {
+                tvResultRef?.text = "Frame layar belum tersedia, tekan Pindai sekali lagi."
+            }
+            return
+        }
 
         isBusyOcr = true
         try {
@@ -584,7 +625,13 @@ class FloatingBubbleService : Service() {
                     .coerceAtMost((fullBitmap.height - top).coerceAtLeast(1))
                 Bitmap.createBitmap(fullBitmap, left, top, w, h)
             } else {
-                Bitmap.createBitmap(fullBitmap, 0, 0, width.coerceAtMost(fullBitmap.width), height.coerceAtMost(fullBitmap.height))
+                Bitmap.createBitmap(
+                    fullBitmap,
+                    0,
+                    0,
+                    width.coerceAtMost(fullBitmap.width),
+                    height.coerceAtMost(fullBitmap.height)
+                )
             }
 
             if (croppedBitmap !== fullBitmap) {
@@ -652,9 +699,12 @@ class FloatingBubbleService : Service() {
         mainHandler.removeCallbacks(autoLoopRunnable)
         releaseProjection()
         translator?.close()
-        bubbleView?.let { windowManager?.removeView(it) }
-        panelView?.let { windowManager?.removeView(it) }
-        cropBoxView?.let { windowManager?.removeView(it) }
+        try {
+            bubbleView?.let { windowManager?.removeView(it) }
+            panelView?.let { windowManager?.removeView(it) }
+            cropBoxView?.let { windowManager?.removeView(it) }
+        } catch (_: Exception) {
+        }
         bubbleView = null
         panelView = null
         cropBoxView = null
