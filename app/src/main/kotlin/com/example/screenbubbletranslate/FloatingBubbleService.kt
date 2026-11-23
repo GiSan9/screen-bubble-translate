@@ -1,6 +1,9 @@
 package com.example.screenbubbletranslate
 
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -15,6 +18,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
@@ -76,80 +80,107 @@ class FloatingBubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 24
-            y = 180
+            x = 20
+            y = 160
         }
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 24, 28, 24)
+            setPadding(26, 20, 26, 20)
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#F5111827"))
-                cornerRadius = 32f
-                setStroke(3, Color.parseColor("#3B82F6"))
+                cornerRadius = 28f
+                setStroke(2, Color.parseColor("#3B82F6"))
             }
             visibility = View.GONE
         }
 
-        val tvHeader = TextView(this).apply {
-            text = "QUICK TRANSLATE • JP → ID"
-            setTextColor(Color.parseColor("#93C5FD"))
-            textSize = 11f
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
 
-        val etInputJp = EditText(this).apply {
-            hint = "Tempel / ketik teks Jepang di sini..."
+        val tvTitle = TextView(this).apply {
+            text = "JP → ID Bubble"
+            setTextColor(Color.parseColor("#93C5FD"))
+            textSize = 12f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val btnClose = TextView(this).apply {
+            text = "✕"
+            setTextColor(Color.parseColor("#F87171"))
+            textSize = 16f
+            setPadding(16, 4, 8, 4)
+        }
+
+        topBar.addView(tvTitle)
+        topBar.addView(btnClose)
+
+        val tvOriginal = TextView(this).apply {
+            text = ""
+            setTextColor(Color.parseColor("#9CA3AF"))
+            textSize = 12f
+            visibility = View.GONE
+            setPadding(0, 8, 0, 4)
+        }
+
+        val tvResult = TextView(this).apply {
+            text = "Ketuk Translate untuk menerjemahkan teks."
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            setPadding(0, 8, 0, 12)
+        }
+
+        val etManual = EditText(this).apply {
+            hint = "Tempel / ketik teks Jepang..."
             setHintTextColor(Color.parseColor("#6B7280"))
             setTextColor(Color.WHITE)
-            textSize = 14f
+            textSize = 13f
+            isFocusable = true
+            isFocusableInTouchMode = true
             setBackgroundColor(Color.parseColor("#1F2937"))
-            setPadding(20, 16, 20, 16)
+            setPadding(18, 12, 18, 12)
+            visibility = View.GONE
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = 10
                 bottomMargin = 10
             }
             layoutParams = lp
         }
 
-        val tvTranslated = TextView(this).apply {
-            text = "Hasil terjemahan akan muncul di sini..."
-            setTextColor(Color.WHITE)
-            textSize = 15f
-            setPadding(0, 6, 0, 14)
-        }
-
-        val btnRow1 = LinearLayout(this).apply {
+        val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
         }
 
         val btnTranslate = Button(this).apply {
-            text = "Terjemahkan"
+            text = "Translate"
             textSize = 12f
         }
 
-        val btnSampleJp = Button(this).apply {
-            text = "Test JP"
+        val btnInputToggle = Button(this).apply {
+            text = "Input Teks"
             textSize = 12f
         }
 
-        val btnRow2 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-
-        val btnHide = Button(this).apply {
-            text = "Sembunyi"
+        val btnCopyResult = Button(this).apply {
+            text = "Salin"
             textSize = 12f
         }
 
-        val btnTurnOff = Button(this).apply {
-            text = "OFF"
-            textSize = 12f
-        }
+        actionRow.addView(btnTranslate)
+        actionRow.addView(btnInputToggle)
+        actionRow.addView(btnCopyResult)
 
-        val panelWidth = (332 * resources.displayMetrics.density).toInt()
+        panel.addView(topBar)
+        panel.addView(tvOriginal)
+        panel.addView(tvResult)
+        panel.addView(etManual)
+        panel.addView(actionRow)
+
+        val panelWidth = (330 * resources.displayMetrics.density).toInt()
         val panelParams = WindowManager.LayoutParams(
             panelWidth,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -158,8 +189,9 @@ class FloatingBubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 24
-            y = 256
+            x = 20
+            y = 232
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
 
         fun setPanelFocusable(focusable: Boolean) {
@@ -173,56 +205,104 @@ class FloatingBubbleService : Service() {
             }
         }
 
-        fun translateText(rawText: String) {
-            val clean = rawText.trim()
-            if (clean.isEmpty()) {
-                tvTranslated.text = "Isi atau tempel teks Jepang dulu, atau tekan 'Test JP'."
+        fun readClipboard(): String? {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
+            val clip = cm.primaryClip ?: return null
+            if (clip.itemCount == 0) return null
+            return clip.getItemAt(0)?.coerceToText(this)?.toString()?.trim()
+        }
+
+        fun runTranslate(textToTranslate: String) {
+            if (textToTranslate.isBlank()) {
+                etManual.visibility = View.VISIBLE
+                setPanelFocusable(true)
+                etManual.requestFocus()
+                tvResult.text = "Clipboard tidak terbaca. Tempel/ketik teks lalu tekan Translate."
                 return
             }
-            tvTranslated.text = "Menerjemahkan..."
-            translator?.translate(clean)
-                ?.addOnSuccessListener { result ->
-                    tvTranslated.text = result
+
+            tvOriginal.visibility = View.VISIBLE
+            tvOriginal.text = textToTranslate
+            tvResult.text = "Menerjemahkan..."
+
+            translator?.translate(textToTranslate)
+                ?.addOnSuccessListener { translated ->
+                    tvResult.text = translated
                 }
                 ?.addOnFailureListener { e ->
-                    tvTranslated.text = "Gagal: ${e.localizedMessage ?: "cek model JP & ID"}"
+                    tvResult.text = "Gagal: ${e.localizedMessage ?: "cek model JP & ID"}"
                 }
         }
 
-        etInputJp.setOnFocusChangeListener { _, hasFocus ->
-            setPanelFocusable(hasFocus)
+        // Geser panel dari bagian judul
+        var pInitX = 0
+        var pInitY = 0
+        var pTouchX = 0f
+        var pTouchY = 0f
+        tvTitle.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    pInitX = panelParams.x
+                    pInitY = panelParams.y
+                    pTouchX = event.rawX
+                    pTouchY = event.rawY
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    panelParams.x = (pInitX + (event.rawX - pTouchX).toInt()).coerceAtLeast(0)
+                    panelParams.y = (pInitY + (event.rawY - pTouchY).toInt()).coerceAtLeast(0)
+                    windowManager?.updateViewLayout(panel, panelParams)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        etManual.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                setPanelFocusable(true)
+                v.requestFocus()
+            }
+            false
         }
 
         btnTranslate.setOnClickListener {
-            translateText(etInputJp.text.toString())
+            val manualText = etManual.text.toString().trim()
+            if (etManual.visibility == View.VISIBLE && manualText.isNotEmpty()) {
+                runTranslate(manualText)
+            } else {
+                val clip = readClipboard()
+                if (!clip.isNullOrBlank()) {
+                    etManual.setText(clip)
+                    runTranslate(clip)
+                } else {
+                    runTranslate(manualText)
+                }
+            }
         }
 
-        btnSampleJp.setOnClickListener {
-            val sample = "おはようございます、今日もよろしくお願いします。"
-            etInputJp.setText(sample)
-            translateText(sample)
+        btnInputToggle.setOnClickListener {
+            val showInput = etManual.visibility != View.VISIBLE
+            etManual.visibility = if (showInput) View.VISIBLE else View.GONE
+            setPanelFocusable(showInput)
+            if (showInput) {
+                etManual.requestFocus()
+            }
         }
 
-        btnHide.setOnClickListener {
+        btnCopyResult.setOnClickListener {
+            val textOut = tvResult.text.toString()
+            if (textOut.isNotBlank() && !textOut.startsWith("Ketuk Translate") && !textOut.startsWith("Menerjemahkan")) {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                cm?.setPrimaryClip(ClipData.newPlainText("Translated JP->ID", textOut))
+                Toast.makeText(this, "Hasil terjemahan disalin", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnClose.setOnClickListener {
             setPanelFocusable(false)
             panel.visibility = View.GONE
         }
-
-        btnTurnOff.setOnClickListener {
-            stopSelf()
-        }
-
-        btnRow1.addView(btnTranslate)
-        btnRow1.addView(btnSampleJp)
-
-        btnRow2.addView(btnHide)
-        btnRow2.addView(btnTurnOff)
-
-        panel.addView(tvHeader)
-        panel.addView(etInputJp)
-        panel.addView(tvTranslated)
-        panel.addView(btnRow1)
-        panel.addView(btnRow2)
 
         var initX = 0
         var initY = 0
@@ -253,7 +333,13 @@ class FloatingBubbleService : Service() {
                     if (!moved) {
                         val willShow = panel.visibility != View.VISIBLE
                         panel.visibility = if (willShow) View.VISIBLE else View.GONE
-                        if (!willShow) {
+                        if (willShow) {
+                            val clip = readClipboard()
+                            if (!clip.isNullOrBlank()) {
+                                etManual.setText(clip)
+                                runTranslate(clip)
+                            }
+                        } else {
                             setPanelFocusable(false)
                         }
                     }
