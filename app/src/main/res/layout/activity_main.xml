@@ -24,7 +24,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="1. Unduh Model Translate (JP -> ID)" />
+        android:text="1. Unduh Model Translate (JP -&gt; ID)" />
 
     <Button
         android:id="@+id/btnStartBubble"
@@ -37,7 +37,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Bubble melayang akan muncul di atas layar. Langkah berikutnya kita tambah tangkap layar & OCR."
+        android:text="Bubble melayang akan muncul di atas layar. Langkah berikutnya kita tambah tangkap layar &amp; OCR."
         android:textSize="13sp" />
 
 </LinearLayout>
