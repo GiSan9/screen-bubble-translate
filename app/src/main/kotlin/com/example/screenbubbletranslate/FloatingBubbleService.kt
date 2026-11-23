@@ -54,8 +54,8 @@ class FloatingBubbleService : Service() {
         private const val NOTIF_ID = 1001
 
         private val modeList = listOf(
-            "Terjemah Layar Penuh",
             "Terjemah Sebagian",
+            "Terjemah Layar Penuh",
             "Terjemah Otomatis",
             "Terjemahan Real-time"
         )
@@ -158,7 +158,7 @@ class FloatingBubbleService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    "Bubble Translate Active",
+                    "Anime Bubble Translate",
                     NotificationManager.IMPORTANCE_LOW
                 )
                 val nm = getSystemService(NotificationManager::class.java)
@@ -170,8 +170,8 @@ class FloatingBubbleService : Service() {
             } else {
                 @Suppress("DEPRECATION")
                 Notification.Builder(this)
-            }.setContentTitle("Bubble Translate Aktif")
-                .setContentText("Layanan overlay berjalan")
+            }.setContentTitle("Anime Bubble TL Aktif")
+                .setContentText("Overlay terjemahan siap digunakan")
                 .setSmallIcon(android.R.drawable.ic_menu_search)
 
             val notification = builder.build()
@@ -246,11 +246,14 @@ class FloatingBubbleService : Service() {
     }
 
     private fun updateModeVisibility() {
-        tvModeBadgeRef?.text = "$currentMode (${srcLang.uppercase()} → ${dstLang.uppercase()})"
+        tvModeBadgeRef?.text = "✦ $currentMode • ${srcLang.uppercase()} → ${dstLang.uppercase()}"
         val showCrop = currentMode == "Terjemah Sebagian"
         cropBoxView?.visibility = if (showCrop) View.VISIBLE else View.GONE
     }
 
+    /**
+     * Membersihkan teks OCR dan memperbaiki typo umum agar terjemahan lebih rapi.
+     */
     private fun cleanOcrText(raw: String): String {
         val dateRegex = Regex("""^\d{1,2}/\d{1,2}/\d{2,4}(\s*\+.*)?$""")
         val sizeRegex = Regex("""^\d+(\.\d+)?\s*(kb|mb|gb|b)$""", RegexOption.IGNORE_CASE)
@@ -270,23 +273,47 @@ class FloatingBubbleService : Service() {
             }
             .distinct()
 
-        val joined = lines.joinToString(" ").replace(Regex("""\s+"""), " ").trim()
-        return if (joined.length > 320) joined.take(320) + "..." else joined
+        var joined = lines.joinToString(" ")
+            .replace(Regex("""\s+"""), " ")
+            .replace(Regex("""\bouite\b""", RegexOption.IGNORE_CASE), "quite")
+            .replace(Regex("""\bexclusve\b""", RegexOption.IGNORE_CASE), "exclusive")
+            .replace(Regex("""\bconflct\b""", RegexOption.IGNORE_CASE), "conflict")
+            .replace(Regex("""\bas wel\b""", RegexOption.IGNORE_CASE), "as well")
+            .trim()
+
+        val maxLen = if (currentMode == "Terjemah Layar Penuh") 220 else 280
+        if (joined.length > maxLen) {
+            joined = joined.take(maxLen) + "..."
+        }
+        return joined
+    }
+
+    private fun makePillButton(label: String, bgHex: String, textHex: String): Button {
+        return Button(this).apply {
+            text = label
+            textSize = 11f
+            isAllCaps = false
+            setTextColor(Color.parseColor(textHex))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(bgHex))
+                cornerRadius = 999f
+                setStroke(2, Color.parseColor("#334155"))
+            }
+            setPadding(16, 8, 16, 8)
+        }
     }
 
     private fun initUiSafe() {
-        val circleBg = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(Color.parseColor("#2563EB"))
-            setStroke(4, Color.WHITE)
-        }
-
         val bubble = TextView(this).apply {
-            text = "TL"
+            text = "✦"
             setTextColor(Color.WHITE)
-            textSize = 15f
+            textSize = 20f
             gravity = Gravity.CENTER
-            background = circleBg
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#EC4899"))
+                setStroke(4, Color.parseColor("#FBCFE8"))
+            }
         }
 
         val typeFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -306,11 +333,12 @@ class FloatingBubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = (screenWidth - sizePx - 24).coerceAtLeast(16)
-            y = (screenHeight * 0.28f).toInt().coerceAtLeast(80)
+            y = (screenHeight * 0.24f).toInt().coerceAtLeast(80)
         }
 
-        val cropW = (screenWidth * 0.86f).toInt().coerceAtLeast(260)
-        val cropH = (screenHeight * 0.18f).toInt().coerceAtLeast(120)
+        // Kotak area untuk mode "Terjemah Sebagian" (pas untuk 1 balon dialog / narasi)
+        val cropW = (screenWidth * 0.72f).toInt().coerceAtLeast(220)
+        val cropH = (screenHeight * 0.16f).toInt().coerceAtLeast(110)
         val cParams = WindowManager.LayoutParams(
             cropW,
             cropH,
@@ -320,25 +348,28 @@ class FloatingBubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = ((screenWidth - cropW) / 2).coerceAtLeast(0)
-            y = (screenHeight * 0.50f).toInt().coerceAtLeast(0)
+            y = (screenHeight * 0.45f).toInt().coerceAtLeast(0)
         }
         cropParams = cParams
 
         val cropBox = FrameLayout(this).apply {
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#2222C55E"))
-                setStroke(3, Color.parseColor("#22C55E"))
-                cornerRadius = 16f
+                setColor(Color.parseColor("#24F472B6"))
+                setStroke(3, Color.parseColor("#F472B6"))
+                cornerRadius = 18f
             }
             visibility = View.GONE
         }
 
         val cropLabel = TextView(this).apply {
-            text = "Area Sebagian (geser)"
+            text = "✦ Fokus Area Dialog"
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#CC14532D"))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#D9831843"))
+                cornerRadius = 12f
+            }
             textSize = 11f
-            setPadding(12, 4, 12, 4)
+            setPadding(14, 4, 14, 4)
         }
         cropBox.addView(cropLabel)
 
@@ -367,13 +398,14 @@ class FloatingBubbleService : Service() {
             }
         }
 
+        // Subtitle box bergaya anime di bagian bawah layar
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 18, 24, 18)
+            setPadding(26, 20, 26, 20)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#F2111827"))
-                cornerRadius = 24f
-                setStroke(2, Color.parseColor("#334155"))
+                setColor(Color.parseColor("#EE0F172A"))
+                cornerRadius = 32f
+                setStroke(3, Color.parseColor("#38BDF8"))
             }
             visibility = View.GONE
         }
@@ -384,24 +416,29 @@ class FloatingBubbleService : Service() {
         }
 
         val tvModeBadge = TextView(this).apply {
-            text = "$currentMode (JA → ID)"
-            setTextColor(Color.parseColor("#93C5FD"))
+            text = "✦ $currentMode • JA → ID"
+            setTextColor(Color.parseColor("#7DD3FC"))
             textSize = 11f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E293B"))
+                cornerRadius = 999f
+            }
+            setPadding(14, 5, 14, 5)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
         val btnSwitchMode = TextView(this).apply {
-            text = "Mode"
-            setTextColor(Color.parseColor("#34D399"))
-            textSize = 12f
-            setPadding(12, 4, 12, 4)
+            text = "Ganti Mode"
+            setTextColor(Color.parseColor("#F9A8D4"))
+            textSize = 11f
+            setPadding(14, 4, 12, 4)
         }
 
         val btnClose = TextView(this).apply {
             text = "✕"
-            setTextColor(Color.parseColor("#F87171"))
+            setTextColor(Color.parseColor("#FDA4AF"))
             textSize = 15f
             setPadding(12, 4, 4, 4)
         }
@@ -412,22 +449,22 @@ class FloatingBubbleService : Service() {
 
         val tvSourcePreview = TextView(this).apply {
             text = ""
-            setTextColor(Color.parseColor("#9CA3AF"))
+            setTextColor(Color.parseColor("#94A3B8"))
             textSize = 11f
-            maxLines = 2
+            maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             visibility = View.GONE
-            setPadding(0, 6, 0, 2)
+            setPadding(4, 8, 4, 2)
         }
 
         val scrollResult = ScrollView(this).apply {
-            val maxH = (130 * resources.displayMetrics.density).toInt()
+            val maxH = (115 * resources.displayMetrics.density).toInt()
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 topMargin = 6
-                bottomMargin = 10
+                bottomMargin = 12
             }
             post {
                 if (height > maxH) {
@@ -439,10 +476,10 @@ class FloatingBubbleService : Service() {
         }
 
         val tvResult = TextView(this).apply {
-            text = "Ketuk Pindai untuk menerjemahkan teks di layar."
-            setTextColor(Color.WHITE)
+            text = "Geser kotak ke dialog lalu ketuk ✦ atau Pindai."
+            setTextColor(Color.parseColor("#F8FAFC"))
             textSize = 15f
-            setLineSpacing(4f, 1.15f)
+            setLineSpacing(5f, 1.18f)
         }
         scrollResult.addView(tvResult)
 
@@ -451,35 +488,23 @@ class FloatingBubbleService : Service() {
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        val btnScanNow = Button(this).apply {
-            text = "Pindai"
-            textSize = 11f
-            isAllCaps = false
-            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+        val btnScanNow = makePillButton("Pindai", "#EC4899", "#FFFFFF").apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginEnd = 6
             }
-            layoutParams = lp
         }
 
-        val btnCopy = Button(this).apply {
-            text = "Salin"
-            textSize = 11f
-            isAllCaps = false
-            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+        val btnCopy = makePillButton("Salin", "#1E293B", "#E2E8F0").apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = 6
                 rightMargin = 6
             }
-            layoutParams = lp
         }
 
-        val btnOff = Button(this).apply {
-            text = "OFF"
-            textSize = 11f
-            isAllCaps = false
-            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+        val btnOff = makePillButton("OFF", "#31102F", "#FDA4AF").apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginStart = 6
             }
-            layoutParams = lp
         }
 
         actionRow.addView(btnScanNow)
@@ -501,7 +526,7 @@ class FloatingBubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = ((screenWidth - panelWidth) / 2).coerceAtLeast(0)
-            y = (screenHeight * 0.72f).toInt().coerceAtLeast(0)
+            y = (screenHeight * 0.75f).toInt().coerceAtLeast(0)
         }
 
         btnSwitchMode.setOnClickListener {
@@ -517,10 +542,10 @@ class FloatingBubbleService : Service() {
 
         btnCopy.setOnClickListener {
             val out = tvResult.text.toString()
-            if (out.isNotBlank() && !out.startsWith("Ketuk Pindai")) {
+            if (out.isNotBlank() && !out.startsWith("Geser kotak")) {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                cm?.setPrimaryClip(ClipData.newPlainText("Translated", out))
-                Toast.makeText(this, "Hasil disalin", Toast.LENGTH_SHORT).show()
+                cm?.setPrimaryClip(ClipData.newPlainText("Anime TL", out))
+                Toast.makeText(this, "Terjemahan disalin", Toast.LENGTH_SHORT).show()
             }
         }
 
