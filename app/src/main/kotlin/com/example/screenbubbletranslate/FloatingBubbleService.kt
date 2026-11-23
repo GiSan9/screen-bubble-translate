@@ -1,8 +1,6 @@
 package com.example.screenbubbletranslate
 
 import android.app.Service
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -14,6 +12,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.mlkit.nl.translate.TranslateLanguage
@@ -83,9 +82,9 @@ class FloatingBubbleService : Service() {
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 26, 32, 26)
+            setPadding(28, 24, 28, 24)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#F2111827"))
+                setColor(Color.parseColor("#F5111827"))
                 cornerRadius = 32f
                 setStroke(3, Color.parseColor("#3B82F6"))
             }
@@ -98,27 +97,46 @@ class FloatingBubbleService : Service() {
             textSize = 11f
         }
 
-        val tvSource = TextView(this).apply {
-            text = "Sumber: (ketuk bubble TL untuk terjemahkan clipboard)"
-            setTextColor(Color.parseColor("#9CA3AF"))
-            textSize = 12f
-            setPadding(0, 8, 0, 0)
+        val etInputJp = EditText(this).apply {
+            hint = "Tempel / ketik teks Jepang di sini..."
+            setHintTextColor(Color.parseColor("#6B7280"))
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setBackgroundColor(Color.parseColor("#1F2937"))
+            setPadding(20, 16, 20, 16)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = 10
+                bottomMargin = 10
+            }
+            layoutParams = lp
         }
 
         val tvTranslated = TextView(this).apply {
             text = "Hasil terjemahan akan muncul di sini..."
             setTextColor(Color.WHITE)
-            textSize = 16f
-            setPadding(0, 10, 0, 16)
+            textSize = 15f
+            setPadding(0, 6, 0, 14)
         }
 
-        val btnRow = LinearLayout(this).apply {
+        val btnRow1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
         }
 
-        val btnTranslateClip = Button(this).apply {
-            text = "Translate"
+        val btnTranslate = Button(this).apply {
+            text = "Terjemahkan"
             textSize = 12f
+        }
+
+        val btnSampleJp = Button(this).apply {
+            text = "Test JP"
+            textSize = 12f
+        }
+
+        val btnRow2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
         }
 
         val btnHide = Button(this).apply {
@@ -127,42 +145,11 @@ class FloatingBubbleService : Service() {
         }
 
         val btnTurnOff = Button(this).apply {
-            text = "OFF Bubble"
+            text = "OFF"
             textSize = 12f
         }
 
-        fun runClipboardTranslate() {
-            val clipText = getClipboardText().orEmpty().trim()
-            if (clipText.isEmpty()) {
-                tvSource.text = "Clipboard kosong"
-                tvTranslated.text = "Salin teks Jepang terlebih dahulu lalu ketuk TL."
-                return
-            }
-            tvSource.text = "JP: $clipText"
-            tvTranslated.text = "Menerjemahkan..."
-            translator?.translate(clipText)
-                ?.addOnSuccessListener { result ->
-                    tvTranslated.text = result
-                }
-                ?.addOnFailureListener { e ->
-                    tvTranslated.text = "Gagal: ${e.localizedMessage ?: "cek model JP & ID"}"
-                }
-        }
-
-        btnTranslateClip.setOnClickListener { runClipboardTranslate() }
-        btnHide.setOnClickListener { panel.visibility = View.GONE }
-        btnTurnOff.setOnClickListener { stopSelf() }
-
-        btnRow.addView(btnTranslateClip)
-        btnRow.addView(btnHide)
-        btnRow.addView(btnTurnOff)
-
-        panel.addView(tvHeader)
-        panel.addView(tvSource)
-        panel.addView(tvTranslated)
-        panel.addView(btnRow)
-
-        val panelWidth = (328 * resources.displayMetrics.density).toInt()
+        val panelWidth = (332 * resources.displayMetrics.density).toInt()
         val panelParams = WindowManager.LayoutParams(
             panelWidth,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -174,6 +161,68 @@ class FloatingBubbleService : Service() {
             x = 24
             y = 256
         }
+
+        fun setPanelFocusable(focusable: Boolean) {
+            panelParams.flags = if (focusable) {
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            } else {
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            }
+            if (panel.windowToken != null) {
+                windowManager?.updateViewLayout(panel, panelParams)
+            }
+        }
+
+        fun translateText(rawText: String) {
+            val clean = rawText.trim()
+            if (clean.isEmpty()) {
+                tvTranslated.text = "Isi atau tempel teks Jepang dulu, atau tekan 'Test JP'."
+                return
+            }
+            tvTranslated.text = "Menerjemahkan..."
+            translator?.translate(clean)
+                ?.addOnSuccessListener { result ->
+                    tvTranslated.text = result
+                }
+                ?.addOnFailureListener { e ->
+                    tvTranslated.text = "Gagal: ${e.localizedMessage ?: "cek model JP & ID"}"
+                }
+        }
+
+        etInputJp.setOnFocusChangeListener { _, hasFocus ->
+            setPanelFocusable(hasFocus)
+        }
+
+        btnTranslate.setOnClickListener {
+            translateText(etInputJp.text.toString())
+        }
+
+        btnSampleJp.setOnClickListener {
+            val sample = "おはようございます、今日もよろしくお願いします。"
+            etInputJp.setText(sample)
+            translateText(sample)
+        }
+
+        btnHide.setOnClickListener {
+            setPanelFocusable(false)
+            panel.visibility = View.GONE
+        }
+
+        btnTurnOff.setOnClickListener {
+            stopSelf()
+        }
+
+        btnRow1.addView(btnTranslate)
+        btnRow1.addView(btnSampleJp)
+
+        btnRow2.addView(btnHide)
+        btnRow2.addView(btnTurnOff)
+
+        panel.addView(tvHeader)
+        panel.addView(etInputJp)
+        panel.addView(tvTranslated)
+        panel.addView(btnRow1)
+        panel.addView(btnRow2)
 
         var initX = 0
         var initY = 0
@@ -204,8 +253,8 @@ class FloatingBubbleService : Service() {
                     if (!moved) {
                         val willShow = panel.visibility != View.VISIBLE
                         panel.visibility = if (willShow) View.VISIBLE else View.GONE
-                        if (willShow) {
-                            runClipboardTranslate()
+                        if (!willShow) {
+                            setPanelFocusable(false)
                         }
                     }
                     true
@@ -218,13 +267,6 @@ class FloatingBubbleService : Service() {
         panelView = panel
         windowManager?.addView(panel, panelParams)
         windowManager?.addView(bubble, bubbleParams)
-    }
-
-    private fun getClipboardText(): String? {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
-        val clip = cm.primaryClip ?: return null
-        if (clip.itemCount == 0) return null
-        return clip.getItemAt(0)?.coerceToText(this)?.toString()
     }
 
     override fun onDestroy() {
